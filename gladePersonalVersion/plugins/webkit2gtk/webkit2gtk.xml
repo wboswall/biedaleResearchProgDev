@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<glade-catalog name="webkit2gtk"
+               version="2.28"
+               targetable="2.26,2.24,2.22,2.20,2.18,2.16,2.14,2.12"
+               library="gladewebkit2gtk"
+               domain="glade"
+               depends="gtk+"
+               book="WebKit2GTK">
+  <init-function>glade_webkit2gtk_init</init-function>
+  <glade-widget-classes>
+
+    <glade-widget-class name="WebKitWebView"
+                        generic-name="webview"
+                        title="WebKit Web View"
+                        get-type-function="webkit_web_view_get_type">
+      <set-property-function>glade_webkit_web_view_set_property</set-property-function>
+      <properties>
+	<property save="False" id="glade-url" name="URL" weight="1.1">
+	  <parameter-spec>
+	    <type>GParamString</type>
+	  </parameter-spec>
+	  <tooltip>The URL to load in Glade (this property will not be saved)</tooltip>
+	</property>
+        <property id="user-content-manager" disabled="True" />
+        <property id="web-context" disabled="True" />
+        <property id="automation-presentation-type">  
+          <displayable-values>
+            <!-- WebKitAutomationBrowsingContextPresentation enumeration value -->
+            <value id="WEBKIT_AUTOMATION_BROWSING_CONTEXT_PRESENTATION_WINDOW" name="Window"/>
+            <!-- WebKitAutomationBrowsingContextPresentation enumeration value -->
+	    <!-- Translators: This is the meaning of "browser tab", not tabulation -->
+            <value id="WEBKIT_AUTOMATION_BROWSING_CONTEXT_PRESENTATION_TAB" name="Tab"/>
+            </displayable-values>
+        </property>
+      </properties>
+    </glade-widget-class>
+
+    <glade-widget-class name="WebKitSettings" 
+                        generic-name="settings"
+                        title="WebKit Settings"
+                        toplevel="True"
+                        get-type-function="webkit_settings_get_type">
+      <properties>
+        <property id="hardware-acceleration-policy">  
+          <displayable-values>
+            <!-- WebKitHardwareAccelerationPolicy enumeration value -->
+            <value id="WEBKIT_HARDWARE_ACCELERATION_POLICY_ON_DEMAND" name="On Demand"/>
+            <!-- WebKitHardwareAccelerationPolicy enumeration value -->
+            <value id="WEBKIT_HARDWARE_ACCELERATION_POLICY_ALWAYS" name="Always"/>
+            <!-- WebKitHardwareAccelerationPolicy enumeration value -->
+            <value id="WEBKIT_HARDWARE_ACCELERATION_POLICY_NEVER" name="Never"/>
+          </displayable-values>
+        </property>
+      </properties>
+    </glade-widget-class>
+  </glade-widget-classes>
+  
+  <glade-widget-group name="webkit2gtk" title="WebKit2GTK+ Widgets">
+    <glade-widget-class-ref name="WebKitWebView"/>
+    <glade-widget-class-ref name="WebKitSettings"/>
+  </glade-widget-group>
+
+</glade-catalog>
