@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<gresources>
+  <gresource prefix="/org/gnome/glade">
+    <file compressed="true" preprocess="xml-stripblanks">glade.glade</file>
+    <file compressed="true" preprocess="xml-stripblanks">glade-preferences.glade</file>
+    <file compressed="true">glade-window.css</file>
+  </gresource>
+</gresources>

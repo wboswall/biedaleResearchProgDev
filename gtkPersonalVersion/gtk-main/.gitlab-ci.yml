@@ -1,0 +1,426 @@
+include:
+  - project: 'gnome/citemplates'
+    file: 'flatpak/flatpak_ci_initiative.yml'
+
+stages:
+  - check
+  - build
+  - analysis
+  - docs
+  - flatpak
+  - publish
+  - deploy
+
+.cache-paths: &cache-paths
+  paths:
+    - _ccache/
+    - subprojects/gdk-pixbuf/
+    - subprojects/glib/
+    - subprojects/graphene/
+    - subprojects/libepoxy/
+    - subprojects/pango/
+
+# Common variables
+variables:
+  COMMON_MESON_FLAGS: "-Dwerror=true -Dcairo:werror=false -Dgi-docgen:werror=false -Dgraphene:werror=false -Dlibepoxy:werror=false -Dlibsass:werror=false -Dpango:werror=false -Dsassc:werror=false -Dgdk-pixbuf:werror=false -Dglib:werror=false -Dlibcloudproviders:werror=false -Dlibpng:werror=false -Dlibtiff:werror=false -Dsysprof:werror=false -Dwayland-protocols:werror=false -Dharfbuzz:werror=false -Dfreetype2:werror=false -Dfontconfig:werror=false -Dfribidi:werror=false -Dlibffi:werror=false -Dlibjpeg-turbo:werror=false -Dmutest:werror=false -Dpixman:werror=false -Dproxy-libintl:werror=false"
+  BACKEND_FLAGS: "-Dx11-backend=true -Dwayland-backend=true -Dbroadway-backend=true"
+  FEATURE_FLAGS: "-Dvulkan=enabled -Dcloudproviders=enabled -Ddemos=false -Dbuild-examples=false -Dbuild-tests=false -Dbuild-testsuite=true"
+  MESON_TEST_TIMEOUT_MULTIPLIER: 3
+  FEDORA_IMAGE: "registry.gitlab.gnome.org/gnome/gtk/fedora:v40"
+  FLATPAK_IMAGE: "quay.io/gnome_infrastructure/gnome-runtime-images:gnome-master"
+
+.only-default:
+  only:
+    - branches
+  except:
+    - tags
+
+style-check-diff:
+  extends: .only-default
+  image: $FEDORA_IMAGE
+  stage: check
+  allow_failure: true
+  script:
+    - .gitlab-ci/run-style-check-diff.sh
+
+.build-fedora-default:
+  extends: .only-default
+  image: $FEDORA_IMAGE
+  artifacts:
+    when: always
+    reports:
+      junit:
+        - "${CI_PROJECT_DIR}/_build/report-x11.xml"
+        - "${CI_PROJECT_DIR}/_build/report-x11_unstable.xml"
+        - "${CI_PROJECT_DIR}/_build/report-wayland.xml"
+        - "${CI_PROJECT_DIR}/_build/report-wayland_unstable.xml"
+        - "${CI_PROJECT_DIR}/_build/report-broadway.xml"
+        - "${CI_PROJECT_DIR}/_build/report-broadway_unstable.xml"
+    name: "gtk-${CI_COMMIT_REF_NAME}"
+    paths:
+      - "${CI_PROJECT_DIR}/_build/meson-logs"
+      - "${CI_PROJECT_DIR}/_build/report*.xml"
+      - "${CI_PROJECT_DIR}/_build/report*.html"
+      - "${CI_PROJECT_DIR}/_build/testsuite/reftests/output/*/*.png"
+      - "${CI_PROJECT_DIR}/_build/testsuite/reftests/output/*/*.node"
+      - "${CI_PROJECT_DIR}/_build/testsuite/tools/output/*/*"
+      - "${CI_PROJECT_DIR}/_build/testsuite/gsk/compare/*/*/*.png"
+      - "${CI_PROJECT_DIR}/_build/testsuite/css/output/*/*.syscap"
+      - "${CI_PROJECT_DIR}/_build_hello/meson-logs"
+  cache:
+    key: "$CI_JOB_NAME"
+    paths:
+      - _ccache/
+
+fedora-x86_64:
+  extends: .build-fedora-default
+  stage: build
+  needs: []
+  variables:
+    EXTRA_MESON_FLAGS: "--buildtype=debug --default-library=both"
+  script:
+    - .gitlab-ci/show-info-linux.sh
+    - export PATH="$HOME/.local/bin:$PATH"
+    - pip3 install --user meson~=0.64
+    - meson subprojects download
+    - meson subprojects update --reset
+    - mkdir _install
+    - meson setup
+            --prefix=${CI_PROJECT_DIR}/_install
+            ${COMMON_MESON_FLAGS}
+            ${EXTRA_MESON_FLAGS}
+            ${BACKEND_FLAGS}
+            ${FEATURE_FLAGS}
+            _build
+    - meson compile -C _build
+    - meson install -C _build
+    - PKG_CONFIG_PATH=${CI_PROJECT_DIR}/_install/lib64/pkgconfig:${CI_PROJECT_DIR}/_install/share/pkgconfig meson setup _build_hello examples/hello
+    - LD_LIBRARY_PATH=${CI_PROJECT_DIR}/_install/lib64 meson compile -C _build_hello
+    - .gitlab-ci/run-tests.sh _build x11
+    - .gitlab-ci/run-tests.sh _build wayland
+    - .gitlab-ci/run-tests.sh _build waylandgles
+    - .gitlab-ci/run-tests.sh _build broadway
+
+release-build:
+  extends: .build-fedora-default
+  stage: build
+  needs: []
+  variables:
+    EXTRA_MESON_FLAGS: "--buildtype=release"
+  script:
+    - .gitlab-ci/show-info-linux.sh
+    - export PATH="$HOME/.local/bin:$PATH"
+    - pip3 install --user meson~=0.64
+    - meson subprojects download
+    - meson subprojects update --reset
+    - meson setup
+            ${COMMON_MESON_FLAGS}
+            ${EXTRA_MESON_FLAGS}
+            ${BACKEND_FLAGS}
+            ${FEATURE_FLAGS}
+            _build
+    - meson compile -C _build
+    - .gitlab-ci/run-tests.sh _build x11
+
+fedora-mingw64:
+  extends: .build-fedora-default
+  stage: build
+  needs: []
+  before_script:
+    - sudo dnf install -y
+            mingw64-filesystem
+            mingw64-gcc
+            mingw64-binutils
+            mingw64-cairo
+            mingw64-gdk-pixbuf
+            mingw64-gstreamer1-plugins-bad-free
+            mingw64-glib2
+            mingw64-libepoxy
+            mingw64-pango
+            # mingw64-graphene (rawhide)
+  script:
+    - .gitlab-ci/show-info-linux.sh
+    - export PATH="$HOME/.local/bin:$PATH"
+    - pip3 install --user meson~=0.64
+    - meson subprojects download
+    - meson subprojects update --reset
+      # Test that mingw64-meson still fails. If it has stopped failing, the CI
+      # will fail and now you should remove the hack that follows this.
+    - FAILED=false
+    - mingw64-meson --version || FAILED=true
+    - test $FAILED = false && echo "mingw64-meson works now, remove the hack" && exit 1
+      # HACK: Running mingw64-meson directly fails on the CI with:
+      #  /usr/bin/mingw64-meson: line 92: fg: no job control
+      # Because rpm is not evaluating %__meson and it gets interpreted as a job
+      # specifier. So we fix that and run it ourselves.
+    - rpm --eval "%{mingw64_meson}" > mingw64-meson.sh
+    - sed -i -e 's/%__meson/meson/' mingw64-meson.sh
+    - chmod +x mingw64-meson.sh
+    - ./mingw64-meson.sh -Dintrospection=disabled -Dgraphene:introspection=disabled _build
+    - ninja -C _build
+
+.mingw-defaults:
+  extends: .only-default
+  stage: build
+  tags:
+    - win32-ps
+  script:
+    - C:\msys64\usr\bin\pacman --noconfirm -Syyuu
+    - C:\msys64\usr\bin\bash -lc "bash -x ./.gitlab-ci/test-msys2.sh"
+  cache:
+    key: "$CI_JOB_NAME"
+    paths:
+      - _ccache/
+      - subprojects/gdk-pixbuf/
+      - subprojects/glib/
+      - subprojects/graphene/
+      - subprojects/libepoxy/
+      - subprojects/pango/
+
+msys2-mingw64:
+  extends: .mingw-defaults
+  needs: []
+  variables:
+    MSYSTEM: "MINGW64"
+    CHERE_INVOKING: "yes"
+  artifacts:
+    when: always
+    expose_as: 'Windows_DLL_MSYS2_64_bit_toolchain'
+    paths:
+      - "${CI_PROJECT_DIR}/_build/gtkdll.tar.gz"
+
+macos:
+  # Sadly, this fails regularly, and its failure is never enlightening
+  allow_failure: true
+  extends: .only-default
+  only:
+    - branches@GNOME/gtk
+  stage: build
+  tags:
+    - macos
+  needs: []
+  before_script:
+    - bash .gitlab-ci/show-info-osx.sh
+    - pip3 install --user meson~=0.64
+    - pip3 install --user ninja
+    - export PATH=/Users/gitlabrunner/Library/Python/3.7/bin:$PATH
+    - export MESON_FORCE_BACKTRACE=1
+  script:
+    - meson setup ${COMMON_MESON_FLAGS}
+            -Dx11-backend=false
+            -Dbroadway-backend=true
+            -Dmacos-backend=true
+            -Dmedia-gstreamer=disabled
+            -Dintrospection=disabled
+            -Dcpp_std=c++11
+            -Dpixman:tests=disabled
+            -Dlibjpeg-turbo:simd=disabled
+            -Ddemos=false
+            -Dbuild-tests=false
+            -Dbuild-examples=false
+            -Dbuild-testsuite=false
+            _build
+    - meson compile -C _build
+  artifacts:
+    when: always
+    paths:
+      - "${CI_PROJECT_DIR}/_build/meson-logs"
+
+vs2017-x64:
+  extends: .only-default
+  # TODO: Uncomment this when ready to merge.
+  #only:
+  #  - branches@GNOME/gtk
+  stage: build
+  tags:
+    - win32-ps
+  needs: []
+  script:
+    - .gitlab-ci/test-msvc.bat
+  artifacts:
+    when: always
+    paths:
+      - "${CI_PROJECT_DIR}/_build/meson-logs"
+
+.flatpak-defaults:
+  image: $FLATPAK_IMAGE
+  stage: flatpak
+  allow_failure: true
+  tags:
+    - flatpak
+  artifacts:
+    paths:
+      - "${APPID}-dev.flatpak"
+      - 'repo.tar'
+    expire_in: 1 day
+  script:
+    - bash -x ./.gitlab-ci/flatpak-build.sh "${APPID}"
+
+# Manual jobs, for branches and MRs
+.flatpak-manual:
+  extends: .flatpak-defaults
+  when: manual
+
+# Only build Flatpak bundles automatically on main
+.flatpak-main:
+  extends: .flatpak-defaults
+  only:
+    - main
+
+flatpak-manual:demo:
+  extends: .flatpak-manual
+  needs: []
+  variables:
+    APPID: org.gtk.Demo4
+
+flatpak-main:demo:
+  extends: .flatpak-main
+  needs: []
+  variables:
+    APPID: org.gtk.Demo4
+
+flatpak-manual:widget-factory:
+  extends: .flatpak-manual
+  needs: []
+  variables:
+    APPID: org.gtk.WidgetFactory4
+
+flatpak-main:widget-factory:
+  extends: .flatpak-main
+  needs: []
+  variables:
+    APPID: org.gtk.WidgetFactory4
+
+flatpak-manual:icon-browser:
+  extends: .flatpak-manual
+  needs: []
+  variables:
+    APPID: org.gtk.IconBrowser4
+
+flatpak-main:icon-browser:
+  extends: .flatpak-main
+  needs: []
+  variables:
+    APPID: org.gtk.IconBrowser4
+
+flatpak-manual:node-editor:
+  extends: .flatpak-manual
+  needs: []
+  variables:
+    APPID: org.gtk.gtk4.NodeEditor
+
+flatpak-main:node-editor:
+  extends: .flatpak-main
+  needs: []
+  variables:
+    APPID: org.gtk.gtk4.NodeEditor
+
+# Publish the demo apps to the GNOME Nightly repo
+# https://wiki.gnome.org/Apps/Nightly
+# https://gitlab.gnome.org/GNOME/Initiatives/-/wikis/DevOps-with-Flatpak
+nightly demo:
+    extends: '.publish_nightly'
+    dependencies: ['flatpak-main:demo']
+    needs: ['flatpak-main:demo']
+
+nightly factory:
+    extends: '.publish_nightly'
+    dependencies: ['flatpak-main:widget-factory']
+    needs: ['flatpak-main:widget-factory']
+
+nightly icon-browser:
+    extends: '.publish_nightly'
+    dependencies: ['flatpak-main:icon-browser']
+    needs: ['flatpak-main:icon-browser']
+
+nightly node-editor:
+    extends: '.publish_nightly'
+    dependencies: ['flatpak-main:node-editor']
+    needs: ['flatpak-main:node-editor']
+
+static-scan:
+  image: $FEDORA_IMAGE
+  stage: analysis
+  needs: []
+  variables:
+    EXTRA_MESON_FLAGS: "--buildtype=debug"
+  script:
+    - export PATH="$HOME/.local/bin:$PATH"
+    - pip3 install --user meson~=0.64
+    - meson setup
+            ${COMMON_MESON_FLAGS}
+            ${EXTRA_MESON_FLAGS}
+            _scan_build
+    - ninja -C _scan_build scan-build
+  artifacts:
+    paths:
+      - _scan_build/meson-logs
+  allow_failure: true
+
+# Run tests with the address sanitizer. We need to turn off introspection
+# and f16c, since they are incompatible with asan
+asan-build:
+  image: $FEDORA_IMAGE
+  tags: [ asan ]
+  stage: analysis
+  needs: []
+  variables:
+  script:
+    - export PATH="$HOME/.local/bin:$PATH"
+    - pip3 install --user meson~=0.64
+    - CC=clang meson setup --buildtype=debugoptimized -Db_sanitize=address -Db_lundef=false -Dintrospection=disabled -Df16c=disabled _build
+    - ninja -C _build
+    - .gitlab-ci/run-tests.sh _build wayland
+  artifacts:
+    paths:
+      - _build/meson-logs
+  allow_failure: true
+
+reference:
+  image: $FEDORA_IMAGE
+  stage: docs
+  needs: []
+  script:
+    - export PATH="$HOME/.local/bin:$PATH"
+    - pip3 install --user meson~=0.64
+    - meson setup
+            ${COMMON_MESON_FLAGS}
+            --buildtype=release
+            --force-fallback-for=gdk-pixbuf,pango
+            -Dintrospection=enabled
+            -Dgtk_doc=true
+            -Dgdk-pixbuf:gtk_doc=true
+            -Dpango:gtk_doc=true
+            -Ddemos=false
+            -Dbuild-examples=false
+            -Dbuild-tests=false
+            -Dbuild-testsuite=false
+            _build
+    - meson compile -C _build
+    - mkdir -p _reference/
+    - mv _build/docs/reference/gdk/gdk4/ _reference/gdk4/
+    - mv _build/docs/reference/gdk/gdk4-x11/ _reference/gdk4-x11/
+    - mv _build/docs/reference/gdk/gdk4-wayland/ _reference/gdk4-wayland/
+    - mv _build/docs/reference/gsk/gsk4/ _reference/gsk4/
+    - mv _build/docs/reference/gtk/gtk4/ _reference/gtk4/
+    - mv _build/subprojects/pango/docs/Pango/ _reference/Pango/
+    - mv _build/subprojects/pango/docs/PangoCairo/ _reference/PangoCairo/
+    - mv _build/subprojects/pango/docs/PangoFc/ _reference/PangoFc/
+    - mv _build/subprojects/pango/docs/PangoFT2/ _reference/PangoFT2/
+    - mv _build/subprojects/pango/docs/PangoOT/ _reference/PangoOT/
+    - mv _build/subprojects/pango/docs/PangoXft/ _reference/PangoXft/
+    - mv _build/subprojects/gdk-pixbuf/docs/gdk-pixbuf/ _reference/gdk-pixbuf/
+    - mv _build/subprojects/gdk-pixbuf/docs/gdk-pixdata/ _reference/gdk-pixdata/
+  artifacts:
+    paths:
+      - _reference
+
+publish-docs:
+  image: fedora:latest
+  stage: publish
+  needs: ['reference']
+  script:
+    - "curl -X POST -F token=${PAGES_TRIGGER_TOKEN} -F ref=docs-gtk-org https://gitlab.gnome.org/api/v4/projects/665/trigger/pipeline"
+  only:
+    refs:
+      - main
