@@ -1,0 +1,7 @@
+# depslib dependency file v1.0
+1522423184 source:/home/william/Documents/HelloWorld/SimRollDicev2/main.cpp
+	<iostream>
+	<ctime>
+	<cmath>
+	<stdlib.h>
+
