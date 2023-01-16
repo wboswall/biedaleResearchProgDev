@@ -1,0 +1,6 @@
+# depslib dependency file v1.0
+1522280329 source:/home/william/Documents/HelloWorld/Table/main.cpp
+	<iostream>
+	<iomanip>
+	<cmath>
+
