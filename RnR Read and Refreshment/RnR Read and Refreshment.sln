@@ -1,0 +1,18 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 11.00
+# Visual Studio 2010
+# SharpDevelop 4.3
+Project("{F184B08F-C81C-45F6-A57F-5ABD9991F28F}") = "RnR Read and Refreshment", "RnR Read and Refreshment\RnR Read and Refreshment.vbproj", "{02B6EB84-4A5B-43CA-9E48-22638EDF3DCA}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{02B6EB84-4A5B-43CA-9E48-22638EDF3DCA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{02B6EB84-4A5B-43CA-9E48-22638EDF3DCA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{02B6EB84-4A5B-43CA-9E48-22638EDF3DCA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{02B6EB84-4A5B-43CA-9E48-22638EDF3DCA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+	EndGlobalSection
+EndGlobal

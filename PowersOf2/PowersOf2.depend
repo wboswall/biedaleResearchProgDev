@@ -1,0 +1,6 @@
+# depslib dependency file v1.0
+1522276746 source:/home/william/Documents/HelloWorld/PowersOf2/main.cpp
+	<iostream>
+	<iomanip>
+	<cmath>
+
